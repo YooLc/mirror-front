@@ -196,6 +196,20 @@ exports.createPages = async ({ graphql, actions, reporter }) => {
   })
 }
 
+// Make `/fancy-index` a client-only catch-all route so it can render for any
+// unknown path while keeping the browser URL unchanged. Static pages still take
+// precedence over matchPath.
+exports.onCreatePage = async ({ page, actions }) => {
+  const { createPage, deletePage } = actions;
+  if (page.path === '/fancy-index/' || page.path === '/fancy-index') {
+    deletePage(page);
+    createPage({
+      ...page,
+      matchPath: '/*',
+    });
+  }
+};
+
 exports.onCreateWebpackConfig = ({ actions }) => {
   actions.setWebpackConfig({
     resolve: {
@@ -204,4 +218,42 @@ exports.onCreateWebpackConfig = ({ actions }) => {
       },
     },
   });
+};
+
+exports.onPostBuild = async ({ reporter }) => {
+  try {
+    const htmlPath = path.join(
+      process.cwd(),
+      'public',
+      'fancy-index',
+      'index.html'
+    );
+    const html = await fs.readFile(htmlPath, 'utf8');
+
+    const splitIndex = html.indexOf('<div id="fancy-end">');
+
+    if (splitIndex === -1) {
+      reporter.warn(
+        'Could not find fancy-start/fancy-end markers in fancy-index/index.html'
+      );
+      return;
+    }
+
+    const before = html.slice(0, splitIndex);
+    const after = html.slice(splitIndex);
+
+    const outDir = path.dirname(htmlPath);
+    await Promise.all([
+      fs.writeFile(path.join(outDir, 'before.html'), before, 'utf8'),
+      fs.writeFile(path.join(outDir, 'after.html'), after, 'utf8'),
+    ]);
+
+    reporter.info(
+      'Generated fancy-index/before.html and fancy-index/after.html'
+    );
+  } catch (error) {
+    reporter.warn(
+      `Post-build split for fancy-index failed: ${error?.message || error}`
+    );
+  }
 };
