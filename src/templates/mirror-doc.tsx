@@ -16,9 +16,10 @@ import { Locale, MirrorDto } from '../types/mirror';
 import { Link } from '../utils/i18n-link';
 import components from './components';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { popCache, writeCache } from '../utils/cache';
+import { readCache } from '../utils/cache';
 import { getUrl } from '../utils/url';
 import TitleMirrorIcon from '../utils/title-mirror-icon';
+import { getMirrorById, fetchMirrors } from '../utils/fetch-mirrors';
 
 interface Data {
   document: {
@@ -30,14 +31,6 @@ interface Data {
 type MirrorDocProps = {
   data: Data;
 };
-
-async function fetchMirror(id: string): Promise<MirrorDto> {
-  const res = await fetch(`/api/mirrors/${id}`);
-  if (!res.ok) {
-    throw new Error(`API call failed: ${res.status} ${await res.text()}`);
-  }
-  return res.json();
-}
 
 const MirrorDoc = ({ data, children }: PropsWithChildren<MirrorDocProps>) => {
   const { language } = useI18next();
@@ -52,13 +45,12 @@ const MirrorDoc = ({ data, children }: PropsWithChildren<MirrorDocProps>) => {
   } as MirrorDto;
   const { mirrorId } = data.document.frontmatter;
 
-  const [mirror, setMirror] = useState<MirrorDto>({
-    ...defaultData,
-    ...popCache(`mirrors_${mirrorId}`, defaultData),
-  });
+  const [mirror, setMirror] = useState<MirrorDto>(
+    getMirrorById(readCache('mirrors', [defaultData]), mirrorId, defaultData)
+  );
   useEffect(() => {
-    fetchMirror(mirrorId)
-      .then(d => setMirror(d))
+    fetchMirrors()
+      .then(d => setMirror(getMirrorById(d, mirrorId, defaultData)))
       .catch(err => console.error(err));
   }, []);
 
@@ -136,7 +128,7 @@ const MirrorDoc = ({ data, children }: PropsWithChildren<MirrorDocProps>) => {
                   <Trans>
                     最近更新于{' '}
                     {{
-                      date: new Date(mirror.lastUpdated * 1000).toLocaleString(
+                      date: new Date(mirror.lastAttempt * 1000).toLocaleString(
                         language
                       ),
                     }}
@@ -166,6 +158,7 @@ const MirrorDoc = ({ data, children }: PropsWithChildren<MirrorDocProps>) => {
                   startIcon={<FolderIcon />}
                   to={mirrorUrl}
                   href={mirrorUrl}
+                  hardNavigate
                 >
                   <Trans>文件列表</Trans>
                 </Button>
